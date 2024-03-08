@@ -1,0 +1,187 @@
+---
+title: "BIOSTAT620 HW2"
+author: "Zihao Han"
+date: "2024-03-07"
+output: 
+  pdf_document:
+    latex_engine: pdflatex
+header-includes:
+  - \usepackage[numbers]{natbib}
+  - \usepackage{graphicx} 
+  - \usepackage[export]{adjustbox}
+  - \usepackage{booktabs}
+---
+```{r,warning=FALSE,include=FALSE}
+# R setup
+library(readxl)
+library(systemfit)
+library(dplyr)
+library(car)
+st = read_excel("./ScreenTimeZihaoHan.xlsx",sheet = 1)
+st$Date <- as.Date(st$Date)
+st <- st[st$Date <= "2024-01-26", ]
+hm_to_min = function(text){
+   split = strsplit(text,"h|m")
+   hours = as.numeric(split[[1]][1])
+   minutes = as.numeric(split[[1]][2])
+   convert_minutes = hours * 60 + minutes
+   return(convert_minutes)
+}
+st$Total.ST.min = sapply(st$Total.ST,hm_to_min)
+st$Social.ST.min = sapply(st$Social.ST,hm_to_min)
+```
+
+\section{PROBLEM 1}
+\textbf{ALL THE CODE IS IN THE github, $https://github.com/ZihaoHanGitHub/biostat620_hw2$ }
+
+\textbf{1a:}B
+
+\textbf{1b:}A
+
+\textbf{1c:}AD
+
+\textbf{1d:}D
+
+\textbf{1e:}AB
+\section{PROBLEM 2}
+\subsection{(a)}
+```{r,echo=FALSE}
+# Generate the Dummy Variable X and Z
+st$X <- ifelse(weekdays(st$Date) %in% c("星期日", "星期六"), 0, 1)
+st$Z <- ifelse(st$Date <= as.Date("2024-01-10"), 0, 1)
+# Creating the lag-1 variable of Y1 and Y2
+st$Y1_lag1 <- c(NA, st$Total.ST.min[-nrow(st)])
+st$Y2_lag1 <- c(NA, st$Social.ST.min[-nrow(st)])
+```
+
+```{r,echo=FALSE}
+# Fit the transitional SUR model
+equations <- list(
+  Total.ST.min ~ Y1_lag1 + X + Z,
+  Social.ST.min ~ Y2_lag1 + X + Z
+)
+sur_model <- systemfit(equations, "SUR", data = st)
+summary_result <- summary(sur_model)
+cat("Equation 1: SUR for Total Screen Time:\n")
+print(summary_result$eq[[1]])
+cat("\nEquation 2: SUR for Social Screen Time:\n")
+print(summary_result$eq[[2]])
+```
+\subsection{(b)}
+\textbf{Identify covariates in each model that are statistically significant at level $ \alpha=0.05$. Explain.}
+
+From the table, in the model of Total Screen Time, we get  The intercept is statistically significant at the 0.05 level (with $pvalue = 0.00077732 < 0,05$), suggesting that the average value of the response variable is significantly different from zero. For other variables, Y1_lag1 with the $pvalue = 0.61045444 > 0.05$, X with the $pvalue = 0.08656981 > 0.05$, Z with the $pvalue = 0.83318166 > 0.05$, indicating these three variables does not have a significant effect on Total Screen Time.
+
+From the table, in the model of Social Screen Time, we get  The intercept is statistically significant at the 0.05 level (with $pvalue = 0.011161 < 0,05$), suggesting that the average value of the response variable is significantly different from zero. For other variables, Y2_lag1 with the $pvalue = 0.206450  > 0.05$, X with the $pvalue = 0.212860   > 0.05$, Z with the $pvalue = 0.277419   > 0.05$, indicating these three variables does not have a significant effect on Total Screen Time.
+
+\subsection{(c)}
+\textbf{Test the null hypothesis $\beta_3 = \gamma_3 = 0$, that is, $Z(t)$ is not an important predictor in BOTH screen time outcomes. Draw conclusion at $\alpha = 0.05$ level.}
+```{r,echo=FALSE}
+# generate the C_matrix for the testing
+C_matrix <- matrix(c(0, 0, 0, 1,0,0,0,1), nrow = 1, byrow = TRUE)
+vcov_matrix <- vcov(sur_model)
+wald_stat <- t(C_matrix %*% coef(sur_model)) %*% solve(C_matrix %*% vcov_matrix %*% t(C_matrix)) %*% (C_matrix %*% coef(sur_model))
+df <- nrow(C_matrix)
+p_value <- 1 - pchisq(wald_stat, df)
+if (p_value > 0.05) {
+  cat("Do not have sufficient evidence to reject the null hypothesis, 
+      with the pvalue",p_value,"\n")
+}else{
+  cat("Reject the Null hypothesis since pvalue is",p_value,"\n")
+}
+cat("This test use the Wald test, with the wald test statistics",wald_stat,"\n")
+```
+\section{PROBLEM 3}
+\subsection{(a)}
+\textbf{Explain why $X_i$ and $\epsilon_i$ are independent.}
+
+$X_i$ denote the $i^{th}$ patients using A or B drugs, and $\epsilon_i$ denoted the error term in this model. Since in this model, the dataset is collected from a randomized clinical trail, it means that the drug selection in the clinical trial is random during the treatment, each individual has the equal chance to use A or B drugs, therefore, $X_i$ would be independent on each other factors. More than that, in SLR assumption, the independence assumption is one of the basic assumption in SLR, therefore, the error term $\epsilon_i$ is always independent on other variables. Hence, $X_i$ and $\epsilon_i$ are independent.
+
+\subsection{(b)}
+\textbf{In model (1), explain which parameter represents the treatment effect of drug A, and explain which parameter represents the treatment effect of drug B}
+
+Since the individual who receive drug A (coded by $X_1 = 1$), and who are randomized to receive drug B (coded by $X_i = -1$). The effect parameter of drug A is $\beta_1$, and the effect parameter of drug B is $- \beta_1$.
+
+\subsection{(c)}
+\textbf{Show that the treatment effects identified in part (b) are invariant for the inclusion of any confounding covariate Z into the model (1)}
+
+Since we plug in the confounding covariate Z into the model, the model equation is become $Y_i = \beta_0 + \beta_1X_i + \beta_2Z_i+\epsilon_i,i = 1,...,2n$. However, the effect of drug A and drug B do not change, The effect parameter of drug A is still $\beta_1$, and the effect parameter of drug B is still $-\beta_1$. Plug in a confounding covariate Z does not change the explanation of effect parameter, meaning that the plug in the Z does not change the interpretation of effects of drug A or drug B. Hence, the treatment effects are invariant for the inclusion of any confounding covariates.
+
+\subsection{(d)}
+\textbf{Give the estimate of the causal effect (i.e. ATE) when drug B is a placebo.}
+
+Since drug B is a placebo, ATE is defined as the average causal effect of the treatment across all subjects. Given that
+
+$ATE = E[Y|X_i = 1]-E[Y|X_i = -1]$, defined as the difference in the expected values of Y between those who receive drug A and those who receive drug B (placebo). Therefore, $ATE = \beta_1 - (-\beta_1) = 2\beta_1$.
+
+Hence the estimate of causal effect ATE is $2\beta_1$ when B is a placebo.
+
+\section{PROBLEM 4}
+\subsection{(a)}
+\textbf{What is the variance of the error $\tilde{\epsilon}=\beta_1\epsilon+e$  under the assumption that the two errors $e$ and $\epsilon$ are independent?}
+
+Since two errors $e$ and $\epsilon$ are independent, 
+
+$Var[\tilde{\epsilon}] = Var[\beta_1\epsilon+e] = Var[\beta_1\epsilon] + Var[e]$
+
+Therefore, $Var[\tilde{\epsilon}] = \beta_1^2Var[\epsilon] + Var[e] = \beta_1^2\sigma^2_{\epsilon} + \sigma^2_{e}$
+
+\subsection{(b)}
+\textbf{What is the variance of the unbiased estimator of $\tilde{\beta}_1=\alpha_1\beta_1$ denoted by $\hat{\tilde{\beta}}_1$, when a random sample of n observations ($Z_i, X_i, Y_i$),$i = 1, . . . , n$, are collected from a biomedical study?}
+
+Since $Y = \tilde{\beta}_{0}+\tilde{\beta}_{1}Z+\tilde{\varepsilon}$, where $\tilde{\beta}_1=\alpha_1\beta_1$.
+
+The unbiased estimator of $\tilde{\beta}_{1}$ is $\tilde{\beta}_{1} = \frac{\sum_{i=1}^n(Z_i-Z)(Y_i-\bar{Y})}{\sum_{i=1}^n(Z_i-\bar{Z})^2}$
+
+With the Variance $Var(\tilde{\beta}_{1}) = \frac{Var[\tilde{\epsilon}]}{SSZ}$, where $SSZ = \sum_{i=1}^{n}(Z_{i}-\bar{Z})^{2}$
+
+Hence $Var(\tilde{\beta}_{1}) = \frac{\beta_1^2\sigma^2_{\epsilon} + \sigma^2_{e}}{SSZ}$
+
+\subsection{(c)}
+\textbf{What is the variance of the unbiased estimator $\alpha_1$, denoted by $\hat{\alpha_1}$, with the random sample of n observations ($Z_i, X_i, Y_i$), $i = 1,..., n$,?}
+
+Since the unbiased estimator of $\alpha_1$ is $\alpha_1 = SSXZ/SSZ$, therefore it given the variance
+
+$Var(\hat{\alpha_1}) =  \frac{Var[e]}{SSZ} = \frac{\sigma^2_{e}}{SSZ}$, where $SSZ = \sum_{i=1}^{n}(Z_{i}-\bar{Z})^{2}$.
+
+\subsection{(d)}
+\textbf{Deriving the variance of the IV estimator $\hat{\beta}_{1}=\frac{\hat{\tilde{\beta}}_{1}}{\hat{\alpha}_{1}}$ seems to be analytically challenging. One may invoke the method of bootstrap to numerically evaluate this variance with the random sample of n observations ($Z_i, X_i, Y_i$), $i = 1, . . . , n$,. Describe the major steps and pseudo code that you design to implement the bootstrap method in the calculation of the variance of the IV estimator.}
+
+Since the $\hat{\tilde{\beta}}_{1}$ is the effect of Z on Y, and $\hat{\alpha}_{1}$ is the effect of Z on X, therefore, they are independent of each other.
+
+Therefore $Var(\hat{\tilde{\beta}}_{1}) = Var(\frac{\hat{\tilde{\beta}}_{1}}{\hat{\alpha}_{1}}) = \frac{Var(\hat{\tilde{\beta}}_{1})}{Var(\hat{\alpha}_{1})}$
+
+Hence, $Var(\hat{\tilde{\beta}}_{1}) = \frac{\beta_1^2\sigma^2_{\epsilon} + \sigma^2_{e}}{SSZ} * \frac{SSZ}{\sigma^2_{e}} = \frac{\beta_1^2\sigma^2_{\epsilon} + \sigma^2_{e}}{\sigma^2_{e}}$
+
+Pseudo Code for implement the Bootstrap method for calculating the variance of the IV estimator:
+
+\textit{Loading the Data}
+
+$ data = read.csv("."), colname = c("Y","X","Z")$
+
+\textit{Define the Bootstrap}
+
+$iteration = n$
+for (i in 1\:iteration) {
+ \# sampling from the original dataset
+ \# calculate the variance of VI estimator
+}
+
+\textit{Calculate the Variance of VI estiamtor by bootstrap}
+\section{PROBLEM 5}
+
+We denote that $x_{i2}$ as an indicator of gender, $x_{i2} = 0$ for male, and $x_{i2} = 1$ for male.
+
+Therefore, 
+
+$y_i=\beta_0^F+\beta_1^Fz_i+\beta_2^Fx_{i1}+\varepsilon_i^F$
+
+$y_i=\beta_0^M+\beta_1^Mz_i+\beta_2^Mx_{i1}+\varepsilon_i^M$
+
+$y_i=\beta_0+\beta_1z_i+\beta_2x_{i1}+\beta_3x_{i2}+\beta_4(z_i\times x_{i2})+\beta_5(x_{i1}\times x_{i2})+\varepsilon_i$, when $x_{i2} = 0$ is becomes to
+
+$y_i = \beta_0 + \beta_1z_i + \beta_2x_{i1} + \epsilon_i$, therefore, $\beta_0^M = \beta_0, \beta_1^M = \beta_1, \beta_2^M = \beta_2$
+
+When $x_{i2} = 1$, the linear model is given by:
+
+$y_i = \beta_0 + \beta_1z_i + \beta_2x_{i1} + \beta_3 + \beta_4z_i + \beta_5x_{i1}$, therefore, $\beta_0^F = \beta_0 + \beta_3, \beta_1^F = \beta_1 + \beta_4, \beta_2^F = \beta_2 + \beta_5$
